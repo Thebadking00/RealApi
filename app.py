@@ -1,8 +1,11 @@
 from flask import Flask, jsonify, request, send_from_directory
-from flask_mysqldb import MySQL
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
+import pymysql
 import config
+
+# Configuración de PyMySQL como MySQLdb
+pymysql.install_as_MySQLdb()
 
 app = Flask(__name__)
 CORS(app)
@@ -12,24 +15,36 @@ app.config['MYSQL_HOST'] = config.MYSQL_HOST
 app.config['MYSQL_USER'] = config.MYSQL_USER
 app.config['MYSQL_PASSWORD'] = config.MYSQL_PASSWORD
 app.config['MYSQL_DB'] = config.MYSQL_DATABASE
-mysql = MySQL(app)
+
+# Inicialización manual de la conexión para usar PyMySQL
+def get_db_connection():
+    return pymysql.connect(
+        host=app.config['MYSQL_HOST'],
+        user=app.config['MYSQL_USER'],
+        password=app.config['MYSQL_PASSWORD'],
+        database=app.config['MYSQL_DB']
+    )
 
 # Rutas existentes de tu API
 @app.route('/usuarios', methods=['GET'])
 def obtener_usuarios():
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("SELECT * FROM usuarios")
     usuarios = cur.fetchall()
     cur.close()
+    conn.close()
     resultado = [{'id': u[0], 'name': u[1], 'email': u[2], 'password': u[3]} for u in usuarios]
     return jsonify(resultado)
 
 @app.route('/usuarios/<int:id>', methods=['GET'])
 def get_user(id):
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("SELECT * FROM usuarios WHERE id = %s", (id,))
     usuario = cur.fetchone()
     cur.close()
+    conn.close()
     if usuario:
         return jsonify({'id': usuario[0], 'name': usuario[1], 'email': usuario[2], 'password': usuario[3]})
     else:
@@ -41,10 +56,12 @@ def create_user():
     name = data['name']
     email = data['email']
     password = data['password']
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("INSERT INTO usuarios (name, email, password) VALUES (%s, %s, %s)", (name, email, password))
-    mysql.connection.commit()
+    conn.commit()
     cur.close()
+    conn.close()
     return jsonify({'message': 'User created successfully'}), 201
 
 @app.route('/usuarios/<int:id>', methods=['PUT'])
@@ -53,18 +70,22 @@ def update_user(id):
     name = data['name']
     email = data['email']
     password = data['password']
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("UPDATE usuarios SET name = %s, email = %s, password = %s WHERE id = %s", (name, email, password, id))
-    mysql.connection.commit()
+    conn.commit()
     cur.close()
+    conn.close()
     return jsonify({'message': 'User updated successfully'})
 
 @app.route('/usuarios/<int:id>', methods=['DELETE'])
 def delete_user(id):
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("DELETE FROM usuarios WHERE id = %s", (id,))
-    mysql.connection.commit()
+    conn.commit()
     cur.close()
+    conn.close()
     return jsonify({'message': 'User deleted successfully'})
 
 @app.route('/login', methods=['POST'])
@@ -72,10 +93,12 @@ def login():
     data = request.get_json()
     email = data['email']
     password = data['password']
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("SELECT * FROM usuarios WHERE email = %s AND password = %s", (email, password))
     user = cur.fetchone()
     cur.close()
+    conn.close()
     if user:
         return jsonify({'message': 'Login successful', 'user': {'id': user[0], 'name': user[1]}})
     else:
